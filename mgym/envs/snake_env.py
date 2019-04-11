@@ -9,13 +9,13 @@ import pyglet
 from collections import deque
 import random
 
-GRID_HEIGHT = 30
-GRID_WIDTH = 30
-GRID_SIZE = 15
+GRID_HEIGHT = 32
+GRID_WIDTH = 32
+GRID_SIZE = 16
 MARGIN = 1
 APPLE_ID = 1
 WALL_ID = 2
-NUM_APPLES = 2
+NUM_APPLES = 7
 
 
 class SnakeEnv(mgym.MEnv):
@@ -79,6 +79,8 @@ class SnakeEnv(mgym.MEnv):
             self.walls.append(Wall(GRID_HEIGHT - 1, i))
 
     def step(self, action):
+        tails_old = [len(snake.tail) for snake in self.snakes]
+
         for i, snake in enumerate(self.snakes):
             snake.update_head(action[i])
 
@@ -103,18 +105,38 @@ class SnakeEnv(mgym.MEnv):
 
         self.remove_dead_snakes()
 
+        '''
         if not self._alive_snakes():
             self.done = True
             print('\n')
             print('*******************')
             print('**** GAME OVER ****')
-            print('******************* \n')
-
+            print('******************* \n')            
+        '''
         self.update_grid()
 
-        rewards = [len(snake.tail) for snake in self.snakes]
+        tails_new = [len(snake.tail) for snake in self.snakes]
+        '''
+        reward +1 when eats apples
+        reward -10 when die
+        '''
 
-        return self.grid, rewards, self.done, {}
+        rewards = [0] * self.N
+        for snk, (t_old, t_new) in enumerate(zip(tails_old, tails_new)):
+            # reward +1 when eats apples
+            if t_new > t_old:
+                r = t_new - t_old
+                self.snakes[snk].reward += r
+                rewards[snk] += r
+            # reward -10 when die
+            if not self.snakes[snk].alive:
+                self.snakes[snk].reward += -10
+                rewards[snk] += -10
+                self.done = True
+
+        cumulative_reward = [snake.reward for snake in self.snakes]
+
+        return self.grid, rewards, self.done, {"cumulative_reward": cumulative_reward}
 
     def remove_dead_snakes(self):
         restricted_sites = set()
@@ -128,7 +150,9 @@ class SnakeEnv(mgym.MEnv):
 
         for snake in self._alive_snakes():
             if (snake.x, snake.y) in restricted_sites:
+                '''
                 print('SNAKE {} DIED!'.format(snake.id - 2))
+                '''
                 snake.alive = False
 
     def render(self):
@@ -237,6 +261,7 @@ class Snake(object):
         self.tail = deque()
         self.tail.appendleft((self.x, self.y))
         self.alive = True
+        self.reward = 1
 
     def update_head(self, action):
         if self.alive:
